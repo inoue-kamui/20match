@@ -376,7 +376,7 @@ private struct ChatDetailView: View {
             
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(spacing: 12, pinnedViews: []) {
+                    LazyVStack(spacing: 12) {
                         ForEach(groupedByDay(), id: \.key) { day, items in
                             // セクション見出し
                             Text(day)
@@ -387,27 +387,25 @@ private struct ChatDetailView: View {
                                 .background(Color.white.opacity(0.10))
                                 .clipShape(Capsule())
                                 .padding(.vertical, 4)
+                                .frame(maxWidth: .infinity)
                             
                             ForEach(items) { msg in
                                 MessageBubbleView(message: msg)
                                     .id(msg.id)
-                                    .padding(.horizontal, 12)
                             }
                         }
                         
                         if isPartnerTyping {
-                            HStack {
-                                MessageBubbleSkeleton(isMe: false) {
-                                    TypingDotsView()
-                                }
-                                Spacer()
+                            MessageBubbleSkeleton(isMe: false) {
+                                TypingDotsView()
                             }
-                            .padding(.horizontal, 12)
                             .transition(.opacity)
                         }
                     }
                     .padding(.vertical, 12)
                 }
+                // ここでScrollViewの左右既定マージンを0にする
+                .contentMargins(.horizontal, 0, for: .scrollContent)
                 .scrollDismissesKeyboard(.interactively)
                 .onChange(of: messages) { _, _ in
                     scrollToBottom(proxy: proxy)
@@ -519,66 +517,70 @@ private struct MessageBubbleView: View {
     }
     
     var body: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            if message.isMe { Spacer(minLength: 40) }
+        // 行全体
+        VStack(alignment: message.isMe ? .trailing : .leading, spacing: 6) {
+            // バブル本体（isMeは右端揃え）
+            Text(message.text)
+                .foregroundColor(.white)
+                .font(.body)
+                .padding(.vertical, 10)
+                .padding(.horizontal, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: corner, style: .continuous)
+                        .fill(bubbleColor)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: corner, style: .continuous)
+                        .stroke(
+                            LinearGradient(
+                                colors: [Color.white.opacity(0.34), Color.white.opacity(0.08)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 0.9
+                        )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: corner, style: .continuous)
+                        .stroke(Color.white.opacity(0.06), lineWidth: 0.8)
+                )
+                .shadow(color: .black.opacity(0.22), radius: 8, x: 0, y: 6)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(
+                    maxWidth: maxBubbleWidth,
+                    alignment: message.isMe ? .trailing : .leading
+                )
             
-            VStack(alignment: message.isMe ? .trailing : .leading, spacing: 6) {
-                // バブル本体
-                Text(message.text)
-                    .foregroundColor(.white)
-                    .font(.body)
-                    .padding(.vertical, 10)
-                    .padding(.horizontal, 12)
-                    .background(
-                        RoundedRectangle(cornerRadius: corner, style: .continuous)
-                            .fill(bubbleColor)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: corner, style: .continuous)
-                            .stroke(
-                                LinearGradient(
-                                    colors: [Color.white.opacity(0.34), Color.white.opacity(0.08)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 0.9
-                            )
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: corner, style: .continuous)
-                            .stroke(Color.white.opacity(0.06), lineWidth: 0.8)
-                    )
-                    .shadow(color: .black.opacity(0.22), radius: 8, x: 0, y: 6)
-                    .frame(minWidth: 44, maxWidth: maxBubbleWidth, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                
-                // メタ情報（時刻・既読など）をバブルの外側に統一配置
-                HStack(spacing: 6) {
-                    if message.isMe {
-                        Text(timeString(message.timestamp))
-                            .font(.caption2)
-                            .foregroundColor(.white.opacity(0.75))
-                        switch message.status {
-                        case .sending:
-                            Text("送信中").font(.caption2).foregroundColor(.white.opacity(0.7))
-                        case .sent:
-                            Text("送信済み").font(.caption2).foregroundColor(.white.opacity(0.7))
-                        case .read:
-                            Text("既読").font(.caption2).foregroundColor(.white.opacity(0.9))
-                        }
-                    } else {
-                        Text(timeString(message.timestamp))
-                            .font(.caption2)
-                            .foregroundColor(.white.opacity(0.7))
+            // メタ情報（isMeは右端揃え）
+            HStack(spacing: 6) {
+                if message.isMe {
+                    Text(timeString(message.timestamp))
+                        .font(.caption2)
+                        .foregroundColor(.white.opacity(0.75))
+                    switch message.status {
+                    case .sending:
+                        Text("送信中").font(.caption2).foregroundColor(.white.opacity(0.7))
+                    case .sent:
+                        Text("送信済み").font(.caption2).foregroundColor(.white.opacity(0.7))
+                    case .read:
+                        Text("既読").font(.caption2).foregroundColor(.white.opacity(0.9))
                     }
+                } else {
+                    Text(timeString(message.timestamp))
+                        .font(.caption2)
+                        .foregroundColor(.white.opacity(0.7))
                 }
-                .frame(maxWidth: maxBubbleWidth, alignment: message.isMe ? .trailing : .leading)
-                .padding(.horizontal, 4)
             }
-            
-            if !message.isMe { Spacer(minLength: 40) }
+            .frame(
+                maxWidth: maxBubbleWidth,
+                alignment: message.isMe ? .trailing : .leading
+            )
+            .padding(.horizontal, 4)
         }
-        .padding(.horizontal, 4)
+        .frame(maxWidth: .infinity, alignment: message.isMe ? .trailing : .leading)
+        // 自分のメッセージは右端にぴったり、相手は左端にぴったり
+        .padding(.trailing, message.isMe ? 0 : 12)
+        .padding(.leading, message.isMe ? 12 : 0)
     }
     
     private func timeString(_ date: Date) -> String {
@@ -594,21 +596,21 @@ private struct MessageBubbleSkeleton<Content: View>: View {
     @ViewBuilder var content: () -> Content
     
     var body: some View {
-        HStack {
-            if isMe { Spacer() }
-            content()
-                .padding(.vertical, 10)
-                .padding(.horizontal, 12)
-                .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color.white.opacity(0.12))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Color.white.opacity(0.18), lineWidth: 0.8)
-                )
-            if !isMe { Spacer() }
-        }
+        content()
+            .padding(.vertical, 10)
+            .padding(.horizontal, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.white.opacity(0.12))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.white.opacity(0.18), lineWidth: 0.8)
+            )
+            .frame(maxWidth: UIScreen.main.bounds.width * 0.5, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: isMe ? .trailing : .leading)
+            .padding(.trailing, isMe ? 0 : 12)
+            .padding(.leading, isMe ? 12 : 0)
     }
 }
 

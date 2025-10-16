@@ -1,7 +1,5 @@
-import type { EnvVariables } from './validation';
-
 export interface ApplicationConfiguration {
-  nodeEnv: EnvVariables['NODE_ENV'];
+  nodeEnv: 'development' | 'test' | 'production';
   app: {
     port: number;
     corsOrigins: string[];
@@ -30,25 +28,35 @@ const parseCorsOrigins = (rawOrigin?: string): string[] => {
     .filter((origin) => origin.length > 0);
 };
 
+const getRequiredEnv = (key: string): string => {
+  const value = process.env[key];
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${key}`);
+  }
+  return value;
+};
+
 export const loadAppConfig = (): ApplicationConfiguration => {
-  const env = process.env as NodeJS.ProcessEnv & EnvVariables;
+  const rawNodeEnv = process.env.NODE_ENV ?? 'development';
+  const nodeEnv: ApplicationConfiguration['nodeEnv'] =
+    rawNodeEnv === 'production' || rawNodeEnv === 'test' ? rawNodeEnv : 'development';
 
   return {
-    nodeEnv: env.NODE_ENV,
+    nodeEnv,
     app: {
-      port: Number(env.PORT ?? 3000),
-      corsOrigins: parseCorsOrigins(env.CORS_ORIGINS)
+      port: Number(process.env.PORT ?? 3000),
+      corsOrigins: parseCorsOrigins(process.env.CORS_ORIGINS)
     },
     database: {
-      url: env.DATABASE_URL
+      url: getRequiredEnv('DATABASE_URL')
     },
     auth: {
-      jwtSecret: env.JWT_SECRET,
-      jwtExpiresIn: env.JWT_EXPIRES_IN ?? '1d'
+      jwtSecret: getRequiredEnv('JWT_SECRET'),
+      jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '1d'
     },
     rateLimit: {
-      limit: Number(env.RATE_LIMIT_LIMIT ?? 100),
-      ttl: Number(env.RATE_LIMIT_TTL ?? 60)
+      limit: Number(process.env.RATE_LIMIT_LIMIT ?? 100),
+      ttl: Number(process.env.RATE_LIMIT_TTL ?? 60)
     }
   };
 };

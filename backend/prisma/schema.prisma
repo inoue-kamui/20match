@@ -1,0 +1,189 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Gender {
+  male
+  female
+}
+
+enum MatchStatus {
+  pending
+  approved
+  rejected
+}
+
+enum MessageType {
+  text
+  image
+  system
+}
+
+model User {
+  id          String             @id @default(uuid())
+  nickname    String             @db.VarChar(20)
+  gender      Gender
+  age         Int
+  prefecture  String             @db.VarChar(32)
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+  posts       Post[]
+  matches     Match[]            @relation("MatchApplicant")
+  participants RoomParticipant[]
+  messages    Message[]
+  notifications Notification[]
+  subscriptions UserSubscription[]
+
+  @@map("users")
+  @@index([nickname])
+  @@index([gender])
+  @@index([age])
+  @@index([prefecture])
+}
+
+model Post {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  content    String    @db.VarChar(100)
+  purposeTag String    @map("purpose_tag") @db.VarChar(32)
+  createdAt  DateTime  @default(now()) @map("created_at")
+  expiresAt  DateTime  @map("expires_at")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  matches    Match[]
+
+  @@map("posts")
+  @@index([purposeTag])
+  @@index([createdAt])
+  @@index([expiresAt])
+}
+
+model Match {
+  id          String      @id @default(uuid())
+  postId      String      @map("post_id")
+  applicantId String      @map("applicant_id")
+  status      MatchStatus
+  createdAt   DateTime    @default(now()) @map("created_at")
+  expiresAt   DateTime    @map("expires_at")
+  post        Post        @relation(fields: [postId], references: [id], onDelete: Cascade)
+  applicant   User        @relation("MatchApplicant", fields: [applicantId], references: [id], onDelete: Cascade)
+  chatRoom    ChatRoom?
+
+  @@map("matches")
+  @@index([postId])
+  @@index([applicantId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ChatRoom {
+  id        String             @id @default(uuid())
+  matchId   String             @unique @map("match_id")
+  createdAt DateTime           @default(now()) @map("created_at")
+  match     Match              @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  participants RoomParticipant[]
+  messages  Message[]
+
+  @@map("chat_rooms")
+  @@index([createdAt])
+}
+
+model RoomParticipant {
+  id        String    @id @default(uuid())
+  roomId    String    @map("room_id")
+  userId    String    @map("user_id")
+  createdAt DateTime  @default(now()) @map("created_at")
+  room      ChatRoom  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("room_participants")
+  @@unique([roomId, userId])
+  @@index([roomId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Message {
+  id          String              @id @default(uuid())
+  roomId      String              @map("room_id")
+  senderId    String              @map("sender_id")
+  content     String?             @db.Text
+  messageType MessageType         @default(text) @map("message_type")
+  isRead      Boolean             @default(false) @map("is_read")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  room        ChatRoom            @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  sender      User                @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  attachments MessageAttachment[]
+
+  @@map("messages")
+  @@index([roomId, createdAt(sort: Desc)])
+  @@index([senderId])
+  @@index([createdAt])
+}
+
+model MessageAttachment {
+  id        String   @id @default(uuid())
+  messageId String   @map("message_id")
+  fileData  Bytes    @map("file_data")
+  fileName  String   @map("file_name") @db.VarChar(128)
+  fileSize  Int      @map("file_size")
+  mimeType  String   @map("mime_type") @db.VarChar(64)
+  createdAt DateTime @default(now()) @map("created_at")
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@map("message_attachments")
+  @@index([messageId])
+  @@index([createdAt])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  type      String   @db.VarChar(32)
+  title     String   @db.VarChar(128)
+  body      String   @db.Text
+  data      Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  expiresAt DateTime @default(dbgenerated("now() + interval '24 hours'")) @map("expires_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+  @@index([userId])
+  @@index([createdAt])
+  @@index([expiresAt])
+}
+
+model AdBanner {
+  id        String   @id @default(uuid())
+  imageUrl  String   @map("image_url")
+  clickUrl  String   @map("click_url")
+  isActive  Boolean  @default(true) @map("is_active")
+  priority  Int      @default(0)
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("ad_banners")
+  @@index([isActive])
+  @@index([expiresAt])
+  @@index([priority])
+}
+
+model UserSubscription {
+  id                String   @id @default(uuid())
+  userId            String   @map("user_id")
+  productId         String   @map("product_id") @db.VarChar(64)
+  entitlementActive Boolean  @map("entitlement_active")
+  renewedAt         DateTime? @map("renewed_at")
+  expiresAt         DateTime? @map("expires_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_subscriptions")
+  @@index([userId])
+  @@index([entitlementActive])
+  @@index([expiresAt])
+}

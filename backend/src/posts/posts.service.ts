@@ -58,4 +58,9 @@ export class PostsService {
       throw new NotFoundException('User not found');
     }
   }
+
+  async findPostById(postId: string): Promise<PostResponseDto | null> {
+    const post = await this.postsRepository.findById(postId);
+    return post ? toPostResponseDto(post) : null;
+  }
 }

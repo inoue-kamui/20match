@@ -21,6 +21,14 @@ export class PostsRepository {
     return this.mapToDomain(created);
   }
 
+  async findById(id: string): Promise<Post | null> {
+    const record = await this.prisma.post.findUnique({
+      where: { id }
+    });
+
+    return record ? this.mapToDomain(record) : null;
+  }
+
   async findMany(filters: PostFilters): Promise<{ items: Post[]; nextCursor?: string }> {
     const where = this.buildWhereClause(filters);
     const take = filters.limit + 1;
