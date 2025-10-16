@@ -351,7 +351,7 @@ private struct TypingDotsView: View {
     }
 }
 
-// MARK: - Chat Detail (Mock UI)
+// MARK: - Chat Detail (Redesigned)
 
 private struct ChatMessage: Identifiable, Equatable {
     enum Status { case sending, sent, read }
@@ -374,52 +374,58 @@ private struct ChatDetailView: View {
         ZStack {
             baseBackground.ignoresSafeArea()
             
-            VStack(spacing: 0) {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(spacing: 10) {
-                            ForEach(groupedByDay(), id: \.key) { day, items in
-                                Text(day)
-                                    .font(.caption)
-                                    .foregroundColor(.white.opacity(0.8))
-                                    .padding(.vertical, 6)
-                                
-                                ForEach(items) { msg in
-                                    MessageBubbleView(message: msg)
-                                        .id(msg.id)
-                                        .padding(.horizontal, 12)
-                                }
-                            }
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 12, pinnedViews: []) {
+                        ForEach(groupedByDay(), id: \.key) { day, items in
+                            // セクション見出し
+                            Text(day)
+                                .font(.caption)
+                                .foregroundColor(.white.opacity(0.85))
+                                .padding(.vertical, 6)
+                                .padding(.horizontal, 10)
+                                .background(Color.white.opacity(0.10))
+                                .clipShape(Capsule())
+                                .padding(.vertical, 4)
                             
-                            if isPartnerTyping {
-                                HStack {
-                                    MessageBubbleSkeleton(isMe: false) {
-                                        TypingDotsView()
-                                    }
-                                    Spacer()
-                                }
-                                .padding(.horizontal, 12)
-                                .transition(.opacity)
+                            ForEach(items) { msg in
+                                MessageBubbleView(message: msg)
+                                    .id(msg.id)
+                                    .padding(.horizontal, 12)
                             }
                         }
-                        .padding(.vertical, 10)
+                        
+                        if isPartnerTyping {
+                            HStack {
+                                MessageBubbleSkeleton(isMe: false) {
+                                    TypingDotsView()
+                                }
+                                Spacer()
+                            }
+                            .padding(.horizontal, 12)
+                            .transition(.opacity)
+                        }
                     }
-                    .onChange(of: messages) { _, _ in
+                    .padding(.vertical, 12)
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .onChange(of: messages) { _, _ in
+                    scrollToBottom(proxy: proxy)
+                }
+                .onAppear {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                         scrollToBottom(proxy: proxy)
                     }
-                    .onAppear {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                            scrollToBottom(proxy: proxy)
-                        }
-                    }
                 }
-                
-                MessageInputBar(
-                    baseBackground: baseBackground,
-                    text: $inputText,
-                    onSend: sendMessage
-                )
             }
+        }
+        // 入力バーは常に最下部に固定（キーボード連動）
+        .safeAreaInset(edge: .bottom) {
+            MessageInputBar(
+                baseBackground: baseBackground,
+                text: $inputText,
+                onSend: sendMessage
+            )
         }
         .navigationTitle(partnerName)
         .navigationBarTitleDisplayMode(.inline)
@@ -508,20 +514,21 @@ private struct MessageBubbleView: View {
         message.isMe ? Color.white.opacity(0.18) : Color.white.opacity(0.12)
     }
     private let corner: CGFloat = 16
+    private var maxBubbleWidth: CGFloat {
+        UIScreen.main.bounds.width * 0.72
+    }
     
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
             if message.isMe { Spacer(minLength: 40) }
             
-            VStack(alignment: message.isMe ? .trailing : .leading, spacing: 4) {
+            VStack(alignment: message.isMe ? .trailing : .leading, spacing: 6) {
                 // バブル本体
                 Text(message.text)
                     .foregroundColor(.white)
                     .font(.body)
                     .padding(.vertical, 10)
                     .padding(.horizontal, 12)
-                    // 右下オーバーレイのための余白を下側に確保
-                    .padding(.bottom, message.isMe ? 14 : 0)
                     .background(
                         RoundedRectangle(cornerRadius: corner, style: .continuous)
                             .fill(bubbleColor)
@@ -542,38 +549,31 @@ private struct MessageBubbleView: View {
                             .stroke(Color.white.opacity(0.06), lineWidth: 0.8)
                     )
                     .shadow(color: .black.opacity(0.22), radius: 8, x: 0, y: 6)
-                    .frame(minWidth: 44, maxWidth: UIScreen.main.bounds.width * 0.72, alignment: .leading)
+                    .frame(minWidth: 44, maxWidth: maxBubbleWidth, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
-                    // 自分メッセージのみ右下に時間＋既読
-                    .overlay(alignment: .bottomTrailing) {
-                        if message.isMe {
-                            HStack(spacing: 6) {
-                                Text(timeString(message.timestamp))
-                                    .font(.caption2)
-                                    .foregroundColor(.white.opacity(0.75))
-                                switch message.status {
-                                case .sending:
-                                    Text("送信中").font(.caption2).foregroundColor(.white.opacity(0.7))
-                                case .sent:
-                                    Text("送信済み").font(.caption2).foregroundColor(.white.opacity(0.7))
-                                case .read:
-                                    Text("既読").font(.caption2).foregroundColor(.white.opacity(0.9))
-                                }
-                            }
-                            .padding(.trailing, 8)
-                            .padding(.bottom, 4)
-                        }
-                    }
                 
-                // 相手メッセージのみ：下に時間
-                if !message.isMe {
-                    Text(timeString(message.timestamp))
-                        .font(.caption2)
-                        .foregroundColor(.white.opacity(0.7))
-                        .padding(.top, 2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.leading, 4)
+                // メタ情報（時刻・既読など）をバブルの外側に統一配置
+                HStack(spacing: 6) {
+                    if message.isMe {
+                        Text(timeString(message.timestamp))
+                            .font(.caption2)
+                            .foregroundColor(.white.opacity(0.75))
+                        switch message.status {
+                        case .sending:
+                            Text("送信中").font(.caption2).foregroundColor(.white.opacity(0.7))
+                        case .sent:
+                            Text("送信済み").font(.caption2).foregroundColor(.white.opacity(0.7))
+                        case .read:
+                            Text("既読").font(.caption2).foregroundColor(.white.opacity(0.9))
+                        }
+                    } else {
+                        Text(timeString(message.timestamp))
+                            .font(.caption2)
+                            .foregroundColor(.white.opacity(0.7))
+                    }
                 }
+                .frame(maxWidth: maxBubbleWidth, alignment: message.isMe ? .trailing : .leading)
+                .padding(.horizontal, 4)
             }
             
             if !message.isMe { Spacer(minLength: 40) }
