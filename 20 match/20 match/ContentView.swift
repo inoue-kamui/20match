@@ -17,6 +17,10 @@ struct ContentView: View {
     ]
     
     @State private var isShowingPostCreationSheet = false
+    @State private var isShowingProfile = false
+    @State private var selectedPostForProfile: Post?
+    // 簡易ブロック回数（Post.id 単位でローカル管理）
+    @State private var blockCounts: [UUID: Int] = [:]
 
     // ダーク背景
     private let baseBackground = Color(red: 33/255, green: 17/255, blue: 52/255)
@@ -29,117 +33,208 @@ struct ContentView: View {
     
     // タブ選択（掲示板=0, チャット=1, 設定=2）
     @AppStorage("selectedTab") private var selectedTab: Int = 0
+    
+    // プロフィール情報（投稿に使用）
+    @AppStorage("profile_iconName") private var profileIconName: String = "person.crop.circle.fill"
+    @AppStorage("profile_age") private var profileAge: Int = 20
+    @AppStorage("profile_prefecture") private var profilePrefectureRaw: String = Prefecture.tokyo.rawValue
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            // 掲示板
-            NavigationStack {
-                ScrollView {
-                    LazyVStack(spacing: 22) {
-                        ForEach(posts) { post in
-                            PostCardView(
-                                post: post,
-                                tagBackground: tagBackground
-                            )
-                            .padding(.horizontal, 18)
-                        }
-                    }
-                    .padding(.vertical, 16)
-                }
-                .background(baseBackground.ignoresSafeArea())
-                .navigationTitle("掲示板")
-                .toolbarBackground(.visible, for: .navigationBar)
-                .toolbarBackground(baseBackground, for: .navigationBar)
-                .toolbarColorScheme(.dark, for: .navigationBar)
-                .toolbar {
-                    ToolbarItem {
-                        Button(action: { isShowingPostCreationSheet.toggle() }) {
-                            Label("Add Post", systemImage: "plus")
-                        }
-                        .tint(.white)
-                    }
-                }
-                .sheet(isPresented: $isShowingPostCreationSheet) {
-                    PostCreationView(posts: $posts)
-                }
-                .refreshable {
-                    // プルリフレッシュ（モック）
-                    try? await Task.sleep(nanoseconds: 600_000_000)
-                }
-            }
-            .tabItem {
-                Label("掲示板", systemImage: "list.bullet")
-            }
-            .tag(0)
-
-            // チャット一覧（検索バーなし）
-            NavigationStack {
-                ChatListView(baseBackground: baseBackground)
-            }
-            .tabItem {
-                Label("チャット", systemImage: "message.fill")
-            }
-            .tag(1)
-
-            // 設定（ScrollView + LazyVStack + カスタム行）
-            NavigationStack {
-                ZStack {
-                    baseBackground.ignoresSafeArea()
+        ZStack {
+            // メインUI
+            TabView(selection: $selectedTab) {
+                // 掲示板
+                NavigationStack {
                     ScrollView {
-                        LazyVStack(spacing: 12) {
-                            NavigationLink {
-                                ProfileEditorView(mode: .edit, baseBackground: baseBackground)
-                            } label: {
+                        LazyVStack(spacing: 22) {
+                            ForEach(posts) { post in
+                                PostCardView(
+                                    post: post,
+                                    tagBackground: tagBackground,
+                                    onIconTap: {
+                                        selectedPostForProfile = post
+                                        withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                                            isShowingProfile = true
+                                        }
+                                    }
+                                )
+                                .padding(.horizontal, 18)
+                            }
+                        }
+                        .padding(.vertical, 16)
+                    }
+                    .background(baseBackground.ignoresSafeArea())
+                    .navigationTitle("掲示板")
+                    .toolbarBackground(.visible, for: .navigationBar)
+                    .toolbarBackground(baseBackground, for: .navigationBar)
+                    .toolbarColorScheme(.dark, for: .navigationBar)
+                    .toolbar {
+                        ToolbarItem {
+                            Button(action: {
+                                withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                                    isShowingPostCreationSheet.toggle()
+                                }
+                            }) {
+                                Label("Add Post", systemImage: "plus")
+                            }
+                            .tint(.white)
+                        }
+                    }
+                    .refreshable {
+                        // プルリフレッシュ（モック）
+                        try? await Task.sleep(nanoseconds: 600_000_000)
+                    }
+                }
+                .tabItem {
+                    Label("掲示板", systemImage: "list.bullet")
+                }
+                .tag(0)
+
+                // チャット一覧（検索バーなし）
+                NavigationStack {
+                    ChatListView(baseBackground: baseBackground)
+                }
+                .tabItem {
+                    Label("チャット", systemImage: "message.fill")
+                }
+                .tag(1)
+
+                // 設定（ScrollView + LazyVStack + カスタム行）
+                NavigationStack {
+                    ZStack {
+                        baseBackground.ignoresSafeArea()
+                        ScrollView {
+                            LazyVStack(spacing: 12) {
+                                NavigationLink {
+                                    ProfileEditorView(mode: .edit, baseBackground: baseBackground)
+                                } label: {
+                                    SettingsRowCard(
+                                        title: "プロフィール設定",
+                                        systemImage: "person.crop.circle"
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                
                                 SettingsRowCard(
-                                    title: "プロフィール設定",
-                                    systemImage: "person.crop.circle"
+                                    title: "通知設定",
+                                    systemImage: "bell.badge"
+                                )
+                                SettingsRowCard(
+                                    title: "利用規約",
+                                    systemImage: "doc.text"
+                                )
+                                SettingsRowCard(
+                                    title: "プライバシーポリシー",
+                                    systemImage: "lock.shield"
+                                )
+                                SettingsRowCard(
+                                    title: "お問い合わせ",
+                                    systemImage: "envelope"
                                 )
                             }
-                            .buttonStyle(.plain)
-                            
-                            SettingsRowCard(
-                                title: "通知設定",
-                                systemImage: "bell.badge"
-                            )
-                            SettingsRowCard(
-                                title: "利用規約",
-                                systemImage: "doc.text"
-                            )
-                            SettingsRowCard(
-                                title: "プライバシーポリシー",
-                                systemImage: "lock.shield"
-                            )
-                            SettingsRowCard(
-                                title: "お問い合わせ",
-                                systemImage: "envelope"
-                            )
+                            .padding(.vertical, 12)
+                            .padding(.horizontal, 16)
                         }
-                        .padding(.vertical, 12)
-                        .padding(.horizontal, 16)
                     }
+                    .navigationTitle("設定")
+                    .toolbarBackground(.visible, for: .navigationBar)
+                    .toolbarBackground(baseBackground, for: .navigationBar)
+                    .toolbarColorScheme(.dark, for: .navigationBar)
                 }
-                .navigationTitle("設定")
-                .toolbarBackground(.visible, for: .navigationBar)
-                .toolbarBackground(baseBackground, for: .navigationBar)
-                .toolbarColorScheme(.dark, for: .navigationBar)
+                .tabItem {
+                    Label("設定", systemImage: "gear")
+                }
+                .tag(2)
             }
-            .tabItem {
-                Label("設定", systemImage: "gear")
+            // 背景ぼかし（投稿 or プロフィール表示中のみ）
+            .blur(radius: (isShowingPostCreationSheet || isShowingProfile) ? 8 : 0, opaque: false)
+            .animation(.easeInOut(duration: 0.22), value: isShowingPostCreationSheet || isShowingProfile)
+            // 背景の操作は無効化（安全のため）
+            .allowsHitTesting(!(isShowingPostCreationSheet || isShowingProfile))
+
+            // 初回起動時フルスクリーンでプロフィール登録
+            .fullScreenCover(isPresented: $showOnboarding) {
+                NavigationStack {
+                    ProfileEditorView(mode: .onboarding, baseBackground: baseBackground)
+                }
+                .tint(.white)
             }
-            .tag(2)
-        }
-        // 初回起動時フルスクリーンでプロフィール登録
-        .fullScreenCover(isPresented: $showOnboarding) {
-            NavigationStack {
-                ProfileEditorView(mode: .onboarding, baseBackground: baseBackground)
+            .onAppear {
+                showOnboarding = !hasCompletedProfile
             }
-            .tint(.white)
-        }
-        .onAppear {
-            showOnboarding = !hasCompletedProfile
-        }
-        .onChange(of: hasCompletedProfile) { _, newValue in
-            showOnboarding = !newValue
+            .onChange(of: hasCompletedProfile) { _, newValue in
+                showOnboarding = !newValue
+            }
+            
+            // 投稿作成オーバーレイ（右上からぬるり）
+            if isShowingPostCreationSheet {
+                // 背景のディミング
+                Color.black.opacity(0.35)
+                    .ignoresSafeArea()
+                    .transition(.opacity)
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.36, dampingFraction: 0.9)) {
+                            isShowingPostCreationSheet = false
+                        }
+                    }
+                
+                PostComposePanel(
+                    baseBackground: baseBackground,
+                    onCancel: {
+                        withAnimation(.spring(response: 0.36, dampingFraction: 0.9)) {
+                            isShowingPostCreationSheet = false
+                        }
+                    },
+                    onPost: { tag, phrase in
+                        let pref = Prefecture(rawValue: profilePrefectureRaw)?.displayName ?? profilePrefectureRaw
+                        let newPost = Post(
+                            icon: profileIconName,
+                            age: profileAge,
+                            prefecture: pref,
+                            content: phrase,
+                            purposeTag: tag
+                        )
+                        posts.insert(newPost, at: 0)
+                        withAnimation(.spring(response: 0.36, dampingFraction: 0.9)) {
+                            isShowingPostCreationSheet = false
+                        }
+                    }
+                )
+                .padding(.horizontal, 16)
+                .transition(.topRightSlideAndFade)
+                .zIndex(1)
+            }
+            
+            // プロフィール表示オーバーレイ（左上からぬるり）
+            if isShowingProfile, let target = selectedPostForProfile {
+                // 背景のディミング
+                Color.black.opacity(0.35)
+                    .ignoresSafeArea()
+                    .transition(.opacity)
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.36, dampingFraction: 0.9)) {
+                            isShowingProfile = false
+                            selectedPostForProfile = nil
+                        }
+                    }
+                
+                ProfileCardPanel(
+                    post: target,
+                    totalBlocks: blockCounts[target.id, default: 0],
+                    onClose: {
+                        withAnimation(.spring(response: 0.36, dampingFraction: 0.9)) {
+                            isShowingProfile = false
+                            selectedPostForProfile = nil
+                        }
+                    },
+                    onBlock: {
+                        blockCounts[target.id, default: 0] += 1
+                    }
+                )
+                .padding(.horizontal, 16)
+                .transition(.topLeftSlideAndFade)
+                .zIndex(2)
+            }
         }
     }
 }
@@ -194,13 +289,13 @@ private struct SettingsRowCard: View {
         )
         .shadow(color: .black.opacity(0.22), radius: 8, x: 0, y: 6)
         .contentShape(Rectangle())
-        // 画面遷移は NavigationLink 側で行う
     }
 }
 
 private struct PostCardView: View {
     let post: Post
     let tagBackground: Color
+    var onIconTap: () -> Void
     
     private let cornerRadius: CGFloat = 16
     @State private var isPressed: Bool = false
@@ -208,9 +303,20 @@ private struct PostCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 14) {
-                Image(systemName: post.icon)
-                    .font(.system(size: 40))
-                    .foregroundColor(.white)
+                Button(action: onIconTap) {
+                    Image(systemName: post.icon)
+                        .font(.system(size: 40))
+                        .foregroundColor(.white)
+                        .padding(6)
+                        .background(
+                            Circle().fill(Color.white.opacity(0.12))
+                        )
+                        .overlay(
+                            Circle().stroke(Color.white.opacity(0.22), lineWidth: 0.8)
+                        )
+                }
+                .buttonStyle(.plain)
+                
                 HStack(spacing: 8) {
                     Text("\(post.age)歳")
                     Text(post.prefecture)
@@ -277,12 +383,10 @@ private struct PostCardView: View {
         }
         .padding(20)
         .background(
-            // 半透明の白ベース（Material/blurなし）
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(Color.white.opacity(0.12))
         )
         .overlay(
-            // 上辺ハイライト
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .strokeBorder(
                     LinearGradient(
@@ -297,7 +401,6 @@ private struct PostCardView: View {
                 )
         )
         .overlay(
-            // ごく薄い外周輪郭
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.06), lineWidth: 0.8)
         )
@@ -465,7 +568,6 @@ private struct TypingDotsView: View {
 
 // MARK: - Chat Detail (Redesigned)
 
-// ...（以下は既存の ChatDetailView 以降を変更せずそのまま残しています）
 private struct ChatMessage: Identifiable, Equatable {
     enum Status { case sending, sent, read }
     let id = UUID()
@@ -491,7 +593,6 @@ private struct ChatDetailView: View {
                 ScrollView {
                     LazyVStack(spacing: 12) {
                         ForEach(groupedByDay(), id: \.key) { day, items in
-                            // セクション見出し
                             Text(day)
                                 .font(.caption)
                                 .foregroundColor(.white.opacity(0.85))
@@ -517,7 +618,6 @@ private struct ChatDetailView: View {
                     }
                     .padding(.vertical, 12)
                 }
-                // ここでScrollViewの左右既定マージンを0にする
                 .contentMargins(.horizontal, 0, for: .scrollContent)
                 .scrollDismissesKeyboard(.interactively)
                 .onChange(of: messages) { _, _ in
@@ -530,7 +630,6 @@ private struct ChatDetailView: View {
                 }
             }
         }
-        // 入力バーは常に最下部に固定（キーボード連動）
         .safeAreaInset(edge: .bottom) {
             MessageInputBar(
                 baseBackground: baseBackground,
@@ -543,7 +642,6 @@ private struct ChatDetailView: View {
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .onAppear {
-            // モック: 2秒後に相手がタイプ開始→1.2秒後に受信
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                 isPartnerTyping = true
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
@@ -587,14 +685,12 @@ private struct ChatDetailView: View {
         var new = ChatMessage(isMe: true, text: trimmed, timestamp: Date(), status: .sending)
         messages.append(new)
         
-        // モック: 送信状態→送信済み
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
             if let idx = messages.firstIndex(of: new) {
                 messages[idx].status = .sent
             }
         }
         
-        // モック: 相手からの返信
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             receiveMock("いいね！それでいこう🙌")
         }
@@ -630,9 +726,7 @@ private struct MessageBubbleView: View {
     }
     
     var body: some View {
-        // 行全体
         VStack(alignment: message.isMe ? .trailing : .leading, spacing: 6) {
-            // バブル本体（isMeは右端揃え）
             Text(message.text)
                 .foregroundColor(.white)
                 .font(.body)
@@ -664,7 +758,6 @@ private struct MessageBubbleView: View {
                     alignment: message.isMe ? .trailing : .leading
                 )
             
-            // メタ情報（isMeは右端揃え）
             HStack(spacing: 6) {
                 if message.isMe {
                     Text(timeString(message.timestamp))
@@ -691,7 +784,6 @@ private struct MessageBubbleView: View {
             .padding(.horizontal, 4)
         }
         .frame(maxWidth: .infinity, alignment: message.isMe ? .trailing : .leading)
-        // 自分のメッセージは右端にぴったり、相手は左端にぴったり
         .padding(.trailing, message.isMe ? 0 : 12)
         .padding(.leading, message.isMe ? 12 : 0)
     }
@@ -782,6 +874,334 @@ private struct MessageInputBar: View {
             .padding(.bottom, 8)
         }
         .background(baseBackground.ignoresSafeArea(edges: .bottom))
+    }
+}
+
+// MARK: - 投稿作成パネル（タグ + ひとこと）
+
+private struct PostComposePanel: View {
+    let baseBackground: Color
+    var onCancel: () -> Void
+    var onPost: (_ selectedTag: String, _ phrase: String) -> Void
+    
+    @State private var selectedTag: String = "飲み友達募集"
+    @State private var phrase: String = ""
+    
+    private let cornerRadius: CGFloat = 18
+    private let tags: [String] = [
+        "飲み友達募集", "映画好き", "カフェ巡り", "グルメ", "旅行好き",
+        "スポーツ", "音楽", "ボードゲーム", "読書", "散歩"
+    ]
+    
+    var body: some View {
+        VStack(spacing: 14) {
+            Capsule()
+                .fill(Color.white.opacity(0.35))
+                .frame(width: 36, height: 4)
+                .padding(.top, 10)
+                .accessibilityHidden(true)
+            
+            HStack {
+                Text("新規投稿")
+                    .foregroundColor(.white)
+                    .font(.headline)
+                Spacer()
+                Button(action: onCancel) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.white)
+                        .padding(8)
+                        .background(Circle().fill(Color.white.opacity(0.14)))
+                        .overlay(Circle().stroke(Color.white.opacity(0.28), lineWidth: 0.8))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 2)
+            
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(tags, id: \.self) { tag in
+                        Button {
+                            selectedTag = tag
+                        } label: {
+                            TagChip(title: tag, selected: selectedTag == tag)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 14)
+            }
+            .padding(.top, 4)
+            
+            TextField("いまの気分をひとこと", text: $phrase, axis: .vertical)
+                .lineLimit(1...3)
+                .padding(.vertical, 10)
+                .padding(.horizontal, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.white.opacity(0.10))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color.white.opacity(0.18), lineWidth: 0.8)
+                )
+                .foregroundColor(.white)
+                .padding(.horizontal, 14)
+            
+            Button {
+                let trimmed = phrase.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return }
+                onPost(selectedTag, trimmed)
+            } label: {
+                PrimaryCapsuleButton(title: "投稿する")
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 14)
+            .padding(.bottom, 14)
+            .disabled(phrase.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .opacity(phrase.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.6 : 1.0)
+        }
+        .background(PanelBackground(cornerRadius: cornerRadius))
+        .shadow(color: .black.opacity(0.28), radius: 16, x: 0, y: 10)
+        .frame(maxWidth: 560)
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .padding(.top, 24)
+        .padding(.trailing, 16)
+        .background(Color.clear.contentShape(Rectangle()))
+    }
+}
+
+// MARK: - プロフィール表示パネル（総ブロック回数 + ブロックボタン）
+
+private struct ProfileCardPanel: View {
+    let post: Post
+    let totalBlocks: Int
+    var onClose: () -> Void
+    var onBlock: () -> Void
+    
+    private let cornerRadius: CGFloat = 18
+    
+    var body: some View {
+        VStack(spacing: 14) {
+            // ハンドル
+            Capsule()
+                .fill(Color.white.opacity(0.35))
+                .frame(width: 36, height: 4)
+                .padding(.top, 10)
+                .accessibilityHidden(true)
+            
+            HStack {
+                Text("プロフィール")
+                    .foregroundColor(.white)
+                    .font(.headline)
+                Spacer()
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.white)
+                        .padding(8)
+                        .background(Circle().fill(Color.white.opacity(0.14)))
+                        .overlay(Circle().stroke(Color.white.opacity(0.28), lineWidth: 0.8))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 2)
+            
+            // プロフィール本体
+            HStack(alignment: .center, spacing: 14) {
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.15))
+                        .frame(width: 72, height: 72)
+                        .overlay(Circle().stroke(Color.white.opacity(0.22), lineWidth: 0.8))
+                    Image(systemName: post.icon)
+                        .foregroundColor(.white)
+                        .font(.system(size: 34, weight: .semibold))
+                }
+                
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("匿名") // Post にはニックネームが無いので暫定表示
+                        .foregroundColor(.white)
+                        .font(.headline)
+                    HStack(spacing: 10) {
+                        Text("\(post.age)歳")
+                        Text(post.prefecture)
+                    }
+                    .foregroundColor(.white.opacity(0.85))
+                    .font(.subheadline)
+                    
+                    // タグ
+                    Text(post.purposeTag)
+                        .font(.caption)
+                        .foregroundColor(.white)
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 10)
+                        .background(Color.white.opacity(0.18))
+                        .clipShape(Capsule())
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            
+            // 総ブロック回数 + ブロックボタン
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("総ブロック回数")
+                        .foregroundColor(.white.opacity(0.85))
+                        .font(.subheadline)
+                    Spacer()
+                    Text("\(totalBlocks) 回")
+                        .foregroundColor(.white)
+                        .font(.headline)
+                }
+                
+                Button(action: onBlock) {
+                    HStack {
+                        Image(systemName: "hand.raised.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                        Text("ブロックする")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(
+                        Capsule().fill(
+                            LinearGradient(
+                                colors: [Color.red.opacity(0.75), Color.red.opacity(0.55)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                    )
+                    .overlay(
+                        Capsule().stroke(Color.white.opacity(0.30), lineWidth: 0.8)
+                    )
+                    .shadow(color: .black.opacity(0.26), radius: 8, x: 0, y: 6)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 14)
+            
+            // 任意: 閉じる
+            Button(action: onClose) {
+                PrimaryCapsuleButton(title: "閉じる")
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 14)
+            .padding(.bottom, 14)
+        }
+        .background(PanelBackground(cornerRadius: cornerRadius))
+        .shadow(color: .black.opacity(0.28), radius: 16, x: 0, y: 10)
+        .frame(maxWidth: 560)
+        .frame(maxWidth: .infinity, alignment: .leading) // 左側に揃える
+        .padding(.top, 24)
+        .padding(.leading, 16)
+        .background(Color.clear.contentShape(Rectangle()))
+    }
+}
+
+// 背景＋枠線（型推論の負荷を下げるために分離）
+private struct PanelBackground: View {
+    let cornerRadius: CGFloat
+    var body: some View {
+        let gradient = LinearGradient(
+            colors: [Color.white.opacity(0.34), Color.white.opacity(0.08)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        return RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(Color.white.opacity(0.12))
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(gradient, lineWidth: 0.9)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(Color.white.opacity(0.06), lineWidth: 0.8)
+            )
+    }
+}
+
+private struct TagChip: View {
+    let title: String
+    let selected: Bool
+    var body: some View {
+        Text(title)
+            .font(.subheadline.weight(.semibold))
+            .foregroundColor(.white)
+            .padding(.vertical, 8)
+            .padding(.horizontal, 12)
+            .background(
+                Capsule().fill(selected ? Color.white.opacity(0.28) : Color.white.opacity(0.14))
+            )
+            .overlay(
+                Capsule().stroke(Color.white.opacity(0.30), lineWidth: 0.8)
+            )
+    }
+}
+
+private struct PrimaryCapsuleButton: View {
+    let title: String
+    var body: some View {
+        Text(title)
+            .font(.headline)
+            .fontWeight(.semibold)
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(
+                Capsule().fill(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.22), Color.white.opacity(0.14)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            )
+            .overlay(
+                Capsule().stroke(Color.white.opacity(0.30), lineWidth: 0.8)
+            )
+            .shadow(color: .black.opacity(0.26), radius: 8, x: 0, y: 6)
+    }
+}
+
+// MARK: - カスタムトランジション（ぬるり：右上/左上）
+
+private extension AnyTransition {
+    static var topRightSlideAndFade: AnyTransition {
+        .modifier(
+            active: TopCornerSlideModifier(progress: 0, anchor: .topTrailing, xSign: 1),
+            identity: TopCornerSlideModifier(progress: 1, anchor: .topTrailing, xSign: 1)
+        )
+    }
+    static var topLeftSlideAndFade: AnyTransition {
+        .modifier(
+            active: TopCornerSlideModifier(progress: 0, anchor: .topLeading, xSign: -1),
+            identity: TopCornerSlideModifier(progress: 1, anchor: .topLeading, xSign: -1)
+        )
+    }
+}
+
+private struct TopCornerSlideModifier: ViewModifier {
+    // 0 → 1 に向かって表示
+    let progress: CGFloat
+    let anchor: UnitPoint
+    // 左右方向の符号（右上=+1, 左上=-1）
+    let xSign: CGFloat
+    
+    func body(content: Content) -> some View {
+        content
+            .opacity(Double(progress))
+            .scaleEffect(0.92 + 0.08 * progress, anchor: anchor)
+            .offset(
+                x: (1 - progress) * 80 * xSign,
+                y: (1 - progress) * -80
+            )
+            .animation(.spring(response: 0.38, dampingFraction: 0.86), value: progress)
     }
 }
 

@@ -232,16 +232,25 @@ struct ProfileEditorView: View {
         let trimmed = tempNickname.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         
+        // 値を保存
         iconName = tempIconName
         nickname = trimmed
         age = tempAge
         prefectureRaw = tempPrefecture.rawValue
         hasCompletedProfile = true
         
-        // 掲示板タブへ切り替え
-        selectedTab = 0
-        
-        dismiss()
+        // 遷移先の分岐
+        switch mode {
+        case .onboarding:
+            // 初回起動時は掲示板タブへ
+            selectedTab = 0
+            // フルスクリーンは hasCompletedProfile の変更により ContentView 側で閉じられるが、
+            // 念のため明示的に dismiss しても問題なし
+            dismiss()
+        case .edit:
+            // 設定タブからの編集時は設定一覧に戻るだけ（タブは変更しない）
+            dismiss()
+        }
     }
 }
 

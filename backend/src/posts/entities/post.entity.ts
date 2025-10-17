@@ -14,10 +14,12 @@ export interface CreatePostInput {
   expiresAt: Date;
 }
 
+import type { Gender } from '../../users/entities/user.entity';
+
 export interface PostFilters {
   purposeTag?: string;
   prefecture?: string;
-  gender?: string;
+  gender?: Gender;
   minAge?: number;
   maxAge?: number;
   cursor?: string;

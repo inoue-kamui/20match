@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { Post as PrismaPost, Prisma } from '@prisma/client';
+import type { Gender as PrismaGender, Post as PrismaPost, Prisma } from '@prisma/client';
 
 import { PrismaService } from '../database/prisma.service';
 import type { CreatePostInput, Post, PostFilters } from './entities/post.entity';
@@ -66,7 +66,7 @@ export class PostsRepository {
     }
 
     if (filters.gender) {
-      userConditions.gender = filters.gender;
+      userConditions.gender = filters.gender as PrismaGender;
     }
 
     if (filters.minAge || filters.maxAge) {
