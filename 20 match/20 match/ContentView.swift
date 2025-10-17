@@ -22,9 +22,16 @@ struct ContentView: View {
     private let baseBackground = Color(red: 33/255, green: 17/255, blue: 52/255)
     // タグの背景
     private let tagBackground = Color.white.opacity(0.4)
+    
+    // 初回起動フラグと表示制御
+    @AppStorage("hasCompletedProfile") private var hasCompletedProfile: Bool = false
+    @State private var showOnboarding: Bool = false
+    
+    // タブ選択（掲示板=0, チャット=1, 設定=2）
+    @AppStorage("selectedTab") private var selectedTab: Int = 0
 
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             // 掲示板
             NavigationStack {
                 ScrollView {
@@ -63,6 +70,7 @@ struct ContentView: View {
             .tabItem {
                 Label("掲示板", systemImage: "list.bullet")
             }
+            .tag(0)
 
             // チャット一覧（検索バーなし）
             NavigationStack {
@@ -71,18 +79,122 @@ struct ContentView: View {
             .tabItem {
                 Label("チャット", systemImage: "message.fill")
             }
+            .tag(1)
 
-            // 設定
-            ZStack {
-                baseBackground.ignoresSafeArea()
-                Text("設定")
-                    .font(.largeTitle)
-                    .foregroundColor(.white)
+            // 設定（ScrollView + LazyVStack + カスタム行）
+            NavigationStack {
+                ZStack {
+                    baseBackground.ignoresSafeArea()
+                    ScrollView {
+                        LazyVStack(spacing: 12) {
+                            NavigationLink {
+                                ProfileEditorView(mode: .edit, baseBackground: baseBackground)
+                            } label: {
+                                SettingsRowCard(
+                                    title: "プロフィール設定",
+                                    systemImage: "person.crop.circle"
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            
+                            SettingsRowCard(
+                                title: "通知設定",
+                                systemImage: "bell.badge"
+                            )
+                            SettingsRowCard(
+                                title: "利用規約",
+                                systemImage: "doc.text"
+                            )
+                            SettingsRowCard(
+                                title: "プライバシーポリシー",
+                                systemImage: "lock.shield"
+                            )
+                            SettingsRowCard(
+                                title: "お問い合わせ",
+                                systemImage: "envelope"
+                            )
+                        }
+                        .padding(.vertical, 12)
+                        .padding(.horizontal, 16)
+                    }
+                }
+                .navigationTitle("設定")
+                .toolbarBackground(.visible, for: .navigationBar)
+                .toolbarBackground(baseBackground, for: .navigationBar)
+                .toolbarColorScheme(.dark, for: .navigationBar)
             }
             .tabItem {
                 Label("設定", systemImage: "gear")
             }
+            .tag(2)
         }
+        // 初回起動時フルスクリーンでプロフィール登録
+        .fullScreenCover(isPresented: $showOnboarding) {
+            NavigationStack {
+                ProfileEditorView(mode: .onboarding, baseBackground: baseBackground)
+            }
+            .tint(.white)
+        }
+        .onAppear {
+            showOnboarding = !hasCompletedProfile
+        }
+        .onChange(of: hasCompletedProfile) { _, newValue in
+            showOnboarding = !newValue
+        }
+    }
+}
+
+// 設定のカスタム行（チャット行と同じ質感のカード）
+private struct SettingsRowCard: View {
+    let title: String
+    let systemImage: String
+    
+    private let cornerRadius: CGFloat = 14
+    
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.white.opacity(0.15))
+                    .frame(width: 40, height: 40)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(Color.white.opacity(0.22), lineWidth: 0.8)
+                    )
+                Image(systemName: systemImage)
+                    .foregroundColor(.white)
+                    .font(.system(size: 18, weight: .semibold))
+            }
+            
+            Text(title)
+                .foregroundColor(.white)
+                .font(.headline)
+            
+            Spacer()
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(Color.white.opacity(0.10))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.30), Color.white.opacity(0.06)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 0.9
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .stroke(Color.white.opacity(0.05), lineWidth: 0.8)
+        )
+        .shadow(color: .black.opacity(0.22), radius: 8, x: 0, y: 6)
+        .contentShape(Rectangle())
+        // 画面遷移は NavigationLink 側で行う
     }
 }
 
@@ -353,6 +465,7 @@ private struct TypingDotsView: View {
 
 // MARK: - Chat Detail (Redesigned)
 
+// ...（以下は既存の ChatDetailView 以降を変更せずそのまま残しています）
 private struct ChatMessage: Identifiable, Equatable {
     enum Status { case sending, sent, read }
     let id = UUID()
